@@ -1,0 +1,51 @@
+---
+- hosts: fortigates
+  collections:
+   - fortinet.fortios
+  connection: httpapi
+  vars:
+   vdom: "root"
+   ansible_httpapi_use_ssl: yes
+   ansible_httpapi_validate_certs: no
+   ansible_httpapi_port: 443
+  tasks:
+
+  - name: Reboot the FortiGate
+    fortios_monitor:
+        vdom:  "{{ vdom }}"
+        access_token: "{{ fortios_access_token }}"
+        selector: 'reboot.system.os'
+
+  - name: Wait for system to become reachable # 600 sec by default
+    ansible.builtin.wait_for_connection:
+  
+  - name: Retreive IPsec vpn configuration and status
+    fortios_monitor_fact:
+      vdom:  "{{ vdom }}"
+      access_token: "{{ fortios_access_token }}"
+      selectors: 
+        - selector: 'vpn_ipsec'
+    register: command_output  
+
+  - name: retrieve tunnel name, remote gateway IP address, and status
+    ansible.builtin.set_fact:
+      vpn2_rgwy: "{{ command_output.meta[0].results[0].rgwy }}"
+      vpn2_name: "{{ command_output.meta[0].results[0].name }}"
+      vpn2_status: "{{ command_output.meta[0].results[0].proxyid[0].status }}"
+      vpn4_rgwy: "{{ command_output.meta[0].results[1].rgwy }}"
+      vpn4_name: "{{ command_output.meta[0].results[1].name }}"
+      vpn4_status: "{{ command_output.meta[0].results[1].proxyid[0].status }}" 
+
+  - name: create file
+    copy:
+      content: ""
+      dest: ./{{ inventory_hostname }}.txt
+
+  - name: write variables to file
+    lineinfile:
+      dest: ./{{ inventory_hostname }}.txt
+      line: "{{ item }}"
+    with_items:
+      - "{{ inventory_hostname }} - {{ ansible_host }}"
+      - "vpn tunnel {{ vpn2_name }} is {{ vpn2_status }}, remote gateway ip {{ vpn2_rgwy }}"
+      - "vpn tunnel {{ vpn4_name }} is {{ vpn4_status }}, remote gateway ip {{ vpn4_rgwy }}"
